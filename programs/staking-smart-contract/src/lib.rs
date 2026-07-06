@@ -32,4 +32,31 @@ pub mod staking_smart_contract {
         msg!("PDA Account Created Successfully!");
         Ok(())
     }
+
+    pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
+        require!(amount > 0, StakeError::InvalidAmount);
+
+        let pda_account = &mut ctx.accounts.pda_account;
+        let clock = Clock::get();
+
+        update_points(pda_account, clock.unix_timestamp)?;
+
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.system_program.to_account_info(),
+                to: ctx.accounts.pda_account.to_account_info(),
+            },
+        );
+        
+        system_program::transfer(cpi_context, amount)?;
+
+        pda_account.staked_amount = pda_account.staked_amount.checked_add(amount)
+            .ok_or(StakeError::Overflow)?;
+
+        msg!("Staked {} lamports. Total Staked: {}, Total points: {}",
+                amount, pda_account.staked_amount, pda_account.total_points / 1_000_000);
+
+        Ok(())
+    }
 }
