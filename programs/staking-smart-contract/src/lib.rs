@@ -136,3 +136,131 @@ use super::*;
     } 
 
 }
+
+fn update_points(pda_account: &mut StakeAccount, current_time: i64) -> Result<()> {
+    let time_elapsed = current_time.checked_sub(pda_account.last_update_time)
+        .ok_or(StakeError::InvalidTimestamp);
+
+    if time_elapsed > 0 && pda_account.staked_amount > 0 {
+        let new_points = calculate_points_earned(pda_account.staked_amount, time_elapsed)?;
+        pda_account.total_points = pda_account.total_points.checked_add(new_points)
+            .ok_or(StakeError::Overflow)?;
+    }
+
+    pda_account.last_update_time = current_time;
+    Ok(())
+}
+
+fn calculate_points_earned(staked_amount: u64, time_elapsed_seconds: u64) -> Result<u64> {
+    let points = (staked_amount as u128)
+        .checked_mul(time_elapsed_seconds as u128)
+        .ok_or(StakeError::Overflow)?
+        .checked_mul(POINTS_PER_SOL_PER_DAY as u128)
+        .ok_or(StakeError::Overflow)?
+        .checked_div(LAMPORTS_PER_SOL as u128)
+        .ok_or(StakeError::Overflow)?
+        .checked_div(SECONDS_PER_DAY as u128)
+        .ok_or(StakeError::Overflow)?;
+
+    Ok(points as u64)
+}
+
+#[derive(Accounts)]
+pub struct CreatePdaAccount<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + 32 + 8 + 8 + 8 + 1, 
+        seeds = [b"client1", payer.key().as_ref()],
+        bump
+    )]
+    pub pda_account: Account<'info, StakeAccount>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Stake<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [b"client1", user.key().as_ref()],
+        bump = pda_account.bump,
+        constraint = pda_account.owner == user.key() @ StakeError::Unauthorized
+    )]
+    pub pda_account: Account<'info, StakeAccount>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct Unstake<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [b"client1", user.key().as_ref()],
+        bump = pda_account.bump,
+        constraint = pda_account.owner == user.key() @ StakeError::Unauthorized
+    )]
+    pub pda_account: Account<'info, StakeAccount>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimPoints<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [b"client1", user.key().as_ref()],
+        bump = pda_account.bump,
+        constraint = pda_account.owner == user.key() @ StakeError::Unauthorized
+    )]
+    pub pda_account: Account<'info, StakeAccount>,
+}
+
+#[derive(Accounts)]
+pub struct GetPoints<'info> {
+    pub user: Signer<'info>,
+    
+    #[account(
+        seeds = [b"client1", user.key().as_ref()],
+        bump = pda_account.bump,
+        constraint = pda_account.owner == user.key() @ StakeError::Unauthorized
+    )]
+    pub pda_account: Account<'info, StakeAccount>,
+}
+
+#[account]
+pub struct StakeAccount {
+    pub owner: Pubkey,           
+    pub staked_amount: u64,      
+    pub total_points: u64,       
+    pub last_update_time: i64,   
+    pub bump: u8,                
+}
+
+#[error_code]
+pub enum StakeError {
+    #[msg("Amount must be greater than 0")]
+    InvalidAmount,
+    #[msg("Insufficient staked amount")]
+    InsufficientStake,
+    #[msg("Unauthorized access")]
+    Unauthorized,
+    #[msg("Arithmetic overflow")]
+    Overflow,
+    #[msg("Arithmetic underflow")]
+    Underflow,
+    #[msg("Invalid timestamp")]
+    InvalidTimestamp,
+}
