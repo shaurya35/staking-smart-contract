@@ -18,7 +18,9 @@ const SECONDS_PER_DAY: u64 = 86_400;
 
 #[program]
 pub mod staking_smart_contract {
-    use super::*;
+    use anchor_lang::accounts::signer;
+
+use super::*;
   
     pub fn create_pda_account(ctx: Context<CreatePdaAccount>) -> Result<()> {
         let pda_account = &mut ctx.accounts.pda_account;
@@ -56,6 +58,44 @@ pub mod staking_smart_contract {
 
         msg!("Staked {} lamports. Total Staked: {}, Total points: {}",
                 amount, pda_account.staked_amount, pda_account.total_points / 1_000_000);
+
+        Ok(())
+    }
+
+    pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Results<()> {
+        require!(amount > 0, StakeError::InvalidAmount);
+
+        let pda_account = &mut ctx.accounts.pda_account;
+        let clock = Clock::get();
+
+        require!(pda_account.staked_amount >= amount, StakeError::InsufficientStake);
+
+        update_points(pda_account, clock.unix_timestamp)?;
+
+        let seed = &[
+            b"client1",
+            ctx.accounts.user.key().as_ref(),
+            &[pda_account.bump],
+        ];
+        
+        let signer = &[&seeds[..]];
+
+        let cpi_context = CpiContext::new_with_signer(
+            ctx.accounts.system_program.to_account_info(), 
+            system_program::Transfer {
+                from: ctx.accounts.pda_account.to_account_info(),
+                to: ctx.accounts.user.to_account_info(),
+            }, 
+            signer,
+        );
+
+        system_program::transfer(cpi_contract, amount)?;
+
+        pda_account.staked_amount = pda_account.staked_amount.check_sub(amount)
+            .ok_or(StakeError::Underflow)?;
+
+        msg!("Unstaked {} lamports, Remaining staked: {}, Total points: {}", 
+            amount, pda_account.staked_amount, pda_account.total_points / 1_000_000);
 
         Ok(())
     }
