@@ -99,4 +99,40 @@ use super::*;
 
         Ok(())
     }
+
+    pub fn claim_points(ctx: Context<ClaimPoints>) -> Results<()> {
+        let pda_account = &mut ctx.accounts.pda_account;
+        let clock = Clock::get();
+
+        update_points(pda_account, clock.unix_timestamp)?;
+
+        let claimable_points = pda_account.total_points / 1_000_000;
+
+        msg!("User has {} claimable points", claimable_points);
+
+        pda_account.total_points = 0;
+
+        Ok(())
+    }
+
+    pub fn get_points(ctx: Context<GetPoints>) -> Results<()> {
+        let pda_account = ctx.accounts.pda_account;
+        let clock = Clock::get();
+
+        let time_elapsed = clock.unix_timestamp.checked_sub(pda_account.last_update_time)
+            .ok_or(StakeError::InvalidTimestamp)?;
+
+        let new_points = calculate_points_earned(pda_account.staked_amount, time_elapsed)?;
+
+        let current_total_points = pda_account.total_points.checked_add(new_points)
+            .ok_or(StakeError::Overflow)?;
+
+        msg!("Current Points: {}, Staked amount: {} SOL",
+                current_total_points / 1_000_000,
+                pda_account.staked_amount / LAMPORTS_PER_SOL
+            );
+
+        Ok(())
+    } 
+
 }
