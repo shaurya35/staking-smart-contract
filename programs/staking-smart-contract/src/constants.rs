@@ -1,10 +1,8 @@
 use anchor_lang::prelude::*;
 
 #[constant]
-pub const COUNTER_SEED: &[u8] = b"counter";
+pub const STAKE_SEED: &[u8] = b"client1";
 
-#[constant]
-pub const HELLO_WORLD_LAMPORTS: u64 = 1;
-
-#[constant]
-pub const MAX_COUNT: u64 = 10;
+pub const POINTS_PER_SOL_PER_DAY: u64 = 1_000_000;
+pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
+pub const SECONDS_PER_DAY: u64 = 86_400;
