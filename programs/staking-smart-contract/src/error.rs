@@ -1,9 +1,19 @@
 use anchor_lang::prelude::*;
 
 #[error_code]
-pub enum ErrorCode {
-    #[msg("Only the counter authority can update this counter")]
+pub enum StakeError {
+    #[msg("Amount must be greater than 0")]
+    InvalidAmount,
+    #[msg("Insufficient staked amount")]
+    InsufficientStake,
+    #[msg("Unauthorized access")]
     Unauthorized,
-    #[msg("Counter has reached the maximum value")]
-    CounterOverflow,
+    #[msg("Arithmetic overflow")]
+    Overflow,
+    #[msg("Arithmetic underflow")]
+    Underflow,
+    #[msg("Invalid timestamp")]
+    InvalidTimestamp,
+    #[msg("Unstake would leave the account below rent-exempt minimum")]
+    RentExemptViolation,
 }
